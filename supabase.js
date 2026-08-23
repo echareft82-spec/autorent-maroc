@@ -1,10 +1,22 @@
 const SUPABASE_URL='https://wtvbqxwuxksvxkjukiaz.supabase.co';
 const SUPABASE_KEY='sb_publishable_EGdpYXvEJlUsH3hgWfTm5w_ef6sR9OS';
+const APP_URL='https://autorent-maroc.vercel.app';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 window.autorentDb=sb;
 
 window.signUpAutoRent=async function({email,password,full_name,role='client',city='',phone=''}){
-  const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name,role,city,phone}}});
+  const {data,error}=await sb.auth.signUp({
+    email,password,
+    options:{
+      emailRedirectTo:`${APP_URL}/index.html`,
+      data:{full_name,role,city,phone}
+    }
+  });
+  if(error) throw error;
+  return data;
+};
+window.resendAutoRentConfirmation=async function(email){
+  const {data,error}=await sb.auth.resend({type:'signup',email,options:{emailRedirectTo:`${APP_URL}/index.html`}});
   if(error) throw error;
   return data;
 };
