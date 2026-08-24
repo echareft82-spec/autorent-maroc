@@ -2,20 +2,12 @@ const SUPABASE_URL='https://wtvbqxwuxksvxkjukiaz.supabase.co';
 const SUPABASE_KEY='sb_publishable_EGdpYXvEJlUsH3hgWfTm5w_ef6sR9OS';
 const APP_URL='https://autorent-maroc.vercel.app';
 
-// Keep every page on one canonical origin so Supabase localStorage sessions
-// are not lost when Vercel preview / branch aliases are opened.
-if(location.hostname.endsWith('.vercel.app') && location.hostname!=='autorent-maroc.vercel.app'){
-  location.replace(`${APP_URL}${location.pathname}${location.search}${location.hash}`);
-  throw new Error('Redirecting to canonical AutoRent origin');
-}
-
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
   auth:{
     persistSession:true,
     autoRefreshToken:true,
     detectSessionInUrl:true,
-    storage:window.localStorage,
-    storageKey:'autorent-maroc-auth'
+    storage:window.localStorage
   }
 });
 window.autorentDb=sb;
@@ -41,7 +33,7 @@ window.signInAutoRent=async function(email,password){
   if(error) throw error;
   return data;
 };
-window.signOutAutoRent=async function(){await sb.auth.signOut();location.href=`${APP_URL}/index.html`};
+window.signOutAutoRent=async function(){await sb.auth.signOut();location.href='index.html'};
 window.getAutoRentUser=async function(){
   const {data:{session}}=await sb.auth.getSession();
   if(session?.user)return session.user;
