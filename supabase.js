@@ -46,7 +46,10 @@ window.createBooking=async function(vehicle,starts_on,ends_on,message=''){
   const u=await window.getAutoRentUser();
   if(!u)throw new Error('AUTH_REQUIRED');
   const days=Math.max(1,Math.ceil((new Date(ends_on)-new Date(starts_on))/86400000));
-  const {data,error}=await sb.from('bookings').insert({client_id:u.id,agency_id:vehicle.agency_id,vehicle_id:vehicle.id,starts_on,ends_on,total_price:Number(vehicle.price_per_day)*days,client_message:message}).select().single();
+  const dailyPrice=Number(vehicle.price_per_day ?? vehicle.price);
+  if(!Number.isFinite(dailyPrice) || dailyPrice<=0)throw new Error('Prix du véhicule invalide.');
+  const totalPrice=dailyPrice*days;
+  const {data,error}=await sb.from('bookings').insert({client_id:u.id,agency_id:vehicle.agency_id,vehicle_id:vehicle.id,starts_on,ends_on,total_price:totalPrice,client_message:message}).select().single();
   if(error)throw error;
   try{
     const {error:notifyError}=await sb.functions.invoke('notify-make-booking',{body:{booking_id:data.id}});
