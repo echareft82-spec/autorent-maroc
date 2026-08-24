@@ -1,7 +1,23 @@
 const SUPABASE_URL='https://wtvbqxwuxksvxkjukiaz.supabase.co';
 const SUPABASE_KEY='sb_publishable_EGdpYXvEJlUsH3hgWfTm5w_ef6sR9OS';
 const APP_URL='https://autorent-maroc.vercel.app';
-const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+// Keep every page on one canonical origin so Supabase localStorage sessions
+// are not lost when Vercel preview / branch aliases are opened.
+if(location.hostname.endsWith('.vercel.app') && location.hostname!=='autorent-maroc.vercel.app'){
+  location.replace(`${APP_URL}${location.pathname}${location.search}${location.hash}`);
+  throw new Error('Redirecting to canonical AutoRent origin');
+}
+
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+  auth:{
+    persistSession:true,
+    autoRefreshToken:true,
+    detectSessionInUrl:true,
+    storage:window.localStorage,
+    storageKey:'autorent-maroc-auth'
+  }
+});
 window.autorentDb=sb;
 
 window.signUpAutoRent=async function({email,password,full_name,role='client',city='',phone=''}){
@@ -25,8 +41,13 @@ window.signInAutoRent=async function(email,password){
   if(error) throw error;
   return data;
 };
-window.signOutAutoRent=async function(){await sb.auth.signOut();location.href='index.html'};
-window.getAutoRentUser=async function(){const {data}=await sb.auth.getUser();return data.user};
+window.signOutAutoRent=async function(){await sb.auth.signOut();location.href=`${APP_URL}/index.html`};
+window.getAutoRentUser=async function(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(session?.user)return session.user;
+  const {data}=await sb.auth.getUser();
+  return data.user;
+};
 window.getAutoRentProfile=async function(){const u=await window.getAutoRentUser();if(!u)return null;const {data}=await sb.from('profiles').select('*').eq('id',u.id).single();return data};
 window.loadVehicles=async function(city){let q=sb.from('vehicles').select('*,agencies(name,verified)').eq('status','available').order('sponsored',{ascending:false}).order('price_per_day');if(city)q=q.eq('city',city);const {data,error}=await q;if(error)throw error;return data||[]};
 window.createBooking=async function(vehicle,starts_on,ends_on,message=''){
