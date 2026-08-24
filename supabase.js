@@ -12,6 +12,18 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 window.autorentDb=sb;
 
+window.getAutoRentSession=async function(){
+  const {data,error}=await sb.auth.getSession();
+  if(error)throw error;
+  if(data?.session)return data.session;
+  try{
+    const {data:refreshed}=await sb.auth.refreshSession();
+    return refreshed?.session||null;
+  }catch(_e){
+    return null;
+  }
+};
+
 window.signUpAutoRent=async function({email,password,full_name,role='client',city='',phone=''}){
   const {data,error}=await sb.auth.signUp({
     email,password,
@@ -20,40 +32,71 @@ window.signUpAutoRent=async function({email,password,full_name,role='client',cit
       data:{full_name,role,city,phone}
     }
   });
-  if(error) throw error;
+  if(error)throw error;
   return data;
 };
+
 window.resendAutoRentConfirmation=async function(email){
   const {data,error}=await sb.auth.resend({type:'signup',email,options:{emailRedirectTo:`${APP_URL}/index.html`}});
-  if(error) throw error;
+  if(error)throw error;
   return data;
 };
+
 window.signInAutoRent=async function(email,password){
   const {data,error}=await sb.auth.signInWithPassword({email,password});
-  if(error) throw error;
+  if(error)throw error;
+  if(!data?.session||!data?.user)throw new Error('La connexion n’a pas créé de session valide. Vérifiez la confirmation de votre email.');
   return data;
 };
-window.signOutAutoRent=async function(){await sb.auth.signOut();location.href='index.html'};
-window.getAutoRentUser=async function(){
-  const {data:{session}}=await sb.auth.getSession();
-  if(session?.user)return session.user;
-  const {data}=await sb.auth.getUser();
-  return data.user;
+
+window.signOutAutoRent=async function(){
+  await sb.auth.signOut();
+  location.assign(`${location.origin}/index.html`);
 };
-window.getAutoRentProfile=async function(){const u=await window.getAutoRentUser();if(!u)return null;const {data}=await sb.from('profiles').select('*').eq('id',u.id).single();return data};
-window.loadVehicles=async function(city){let q=sb.from('vehicles').select('*,agencies(name,verified)').eq('status','available').order('sponsored',{ascending:false}).order('price_per_day');if(city)q=q.eq('city',city);const {data,error}=await q;if(error)throw error;return data||[]};
+
+window.getAutoRentUser=async function(){
+  const session=await window.getAutoRentSession();
+  return session?.user||null;
+};
+
+window.getAutoRentProfile=async function(){
+  const u=await window.getAutoRentUser();
+  if(!u)return null;
+  const {data,error}=await sb.from('profiles').select('*').eq('id',u.id).maybeSingle();
+  if(error)throw error;
+  return data||null;
+};
+
+window.loadVehicles=async function(city){
+  let q=sb.from('vehicles').select('*,agencies(name,verified)').eq('status','available').order('sponsored',{ascending:false}).order('price_per_day');
+  if(city)q=q.eq('city',city);
+  const {data,error}=await q;
+  if(error)throw error;
+  return data||[];
+};
+
 window.createBooking=async function(vehicle,starts_on,ends_on,message=''){
   const u=await window.getAutoRentUser();
   if(!u)throw new Error('AUTH_REQUIRED');
   const days=Math.max(1,Math.ceil((new Date(ends_on)-new Date(starts_on))/86400000));
   const dailyPrice=Number(vehicle.price_per_day ?? vehicle.price);
-  if(!Number.isFinite(dailyPrice) || dailyPrice<=0)throw new Error('Prix du véhicule invalide.');
+  if(!Number.isFinite(dailyPrice)||dailyPrice<=0)throw new Error('Prix du véhicule invalide.');
   const totalPrice=dailyPrice*days;
-  const {data,error}=await sb.from('bookings').insert({client_id:u.id,agency_id:vehicle.agency_id,vehicle_id:vehicle.id,starts_on,ends_on,total_price:totalPrice,client_message:message}).select().single();
+  const {data,error}=await sb.from('bookings').insert({
+    client_id:u.id,
+    agency_id:vehicle.agency_id,
+    vehicle_id:vehicle.id,
+    starts_on,
+    ends_on,
+    total_price:totalPrice,
+    client_message:message
+  }).select().single();
   if(error)throw error;
   try{
     const {error:notifyError}=await sb.functions.invoke('notify-make-booking',{body:{booking_id:data.id}});
     if(notifyError)console.warn('Make notification failed',notifyError);
-  }catch(e){console.warn('Make notification failed',e)}
+  }catch(e){
+    console.warn('Make notification failed',e);
+  }
   return data;
 };
